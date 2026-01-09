@@ -125,6 +125,12 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
+  // Initialize scheduling attributes
+  p->priority = 60;
+  acquire(&tickslock);
+  p->ctime = ticks;
+  release(&tickslock);
+
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -438,6 +444,8 @@ scheduler(void)
     intr_off();
 
     int found = 0;
+    
+#if defined(SCHEDULER_RR)
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
@@ -455,6 +463,64 @@ scheduler(void)
       }
       release(&p->lock);
     }
+#elif defined(SCHEDULER_FCFS)
+    struct proc *min_p = 0;
+    // Inspect all processes to find the one with the smallest ctime
+    for(p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      if(p->state == RUNNABLE) {
+        if(min_p == 0 || p->ctime < min_p->ctime) {
+          if(min_p) release(&min_p->lock);
+          min_p = p;
+          continue; // keep the lock on min_p
+        }
+      }
+      release(&p->lock);
+    }
+
+    if(min_p != 0) {
+      p = min_p; // p has the lock
+      p->state = RUNNING;
+      c->proc = p;
+      swtch(&c->context, &p->context);
+      c->proc = 0;
+      found = 1;
+      release(&p->lock);
+    }
+#elif defined(SCHEDULER_PBS)
+    struct proc *priority_p = 0;
+    // Inspect all processes to find the one with the highest priority (lowest value)
+    for(p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      if(p->state == RUNNABLE) {
+        // A lower value implies strictly higher priority.
+        // If values are equal, we use Round Robin (effectively via list order/count)
+        // Note: This simple implementation picks the first one it finds with strict better priority
+        // relative to the current best scan. To truly do RR for equal priority, we'd need more state,
+        // but often stable sort or round-robin scan is sufficient. 
+        // Here we just pick the first 'lowest value' we encounter.
+        // To prevent starvation among equals, we might need a dynamic adjustment or niceness, 
+        // but basic PBS is static.
+        if(priority_p == 0 || p->priority < priority_p->priority) { 
+          if(priority_p) release(&priority_p->lock);
+          priority_p = p;
+          continue;
+        }
+      }
+      release(&p->lock);
+    }
+
+    if(priority_p != 0) {
+      p = priority_p;
+      p->state = RUNNING;
+      c->proc = p;
+      swtch(&c->context, &p->context);
+      c->proc = 0;
+      found = 1;
+      release(&p->lock);
+    }
+#endif
+
     if(found == 0) {
       // nothing to run; stop running on this core until an interrupt.
       asm volatile("wfi");
@@ -687,4 +753,25 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int
+set_priority(int pid, int priority)
+{
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid == pid && p->state != UNUSED){
+      int old = p->priority;
+      p->priority = priority;
+      release(&p->lock);
+      if (old > priority) {
+         yield(); 
+      }
+      return old;
+    }
+    release(&p->lock);
+  }
+  return -1;
 }

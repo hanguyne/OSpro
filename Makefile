@@ -67,6 +67,19 @@ CFLAGS += -MD
 CFLAGS += -mcmodel=medany
 CFLAGS += -ffreestanding
 CFLAGS += -fno-common -nostdlib
+
+# Scheduler selection
+ifndef SCHEDULER
+	SCHEDULER := RR
+endif
+
+ifeq ($(SCHEDULER),RR)
+	CFLAGS += -DSCHEDULER_RR
+else ifeq ($(SCHEDULER),FCFS)
+	CFLAGS += -DSCHEDULER_FCFS
+else ifeq ($(SCHEDULER),PBS)
+	CFLAGS += -DSCHEDULER_PBS
+endif
 CFLAGS += -fno-builtin-strncpy -fno-builtin-strncmp -fno-builtin-strlen -fno-builtin-memset
 CFLAGS += -fno-builtin-memmove -fno-builtin-memcmp -fno-builtin-log -fno-builtin-bzero
 CFLAGS += -fno-builtin-strchr -fno-builtin-exit -fno-builtin-malloc -fno-builtin-putc
@@ -145,6 +158,7 @@ UPROGS=\
 	$U/_logstress\
 	$U/_forphan\
 	$U/_dorphan\
+	$U/_schedtest\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

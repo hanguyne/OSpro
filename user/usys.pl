@@ -41,4 +41,6 @@ entry("dup");
 entry("getpid");
 entry("sbrk");
 entry("pause");
+
 entry("uptime");
+entry("set_priority");
