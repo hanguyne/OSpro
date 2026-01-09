@@ -45,7 +45,7 @@ main(int argc, char *argv[])
       set_priority(getpid(), prio);
       
       uint64 my_start = uptime();
-      work(50); // do some work
+      work(500); // do significant work approx 5 ticks
       uint64 my_end = uptime();
       
       printf("Child %d (pid %d) (prio %d): start %d, end %d, duration %d\n", i, getpid(), prio, (int)my_start, (int)my_end, (int)(my_end - my_start));
